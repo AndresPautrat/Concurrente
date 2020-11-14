@@ -23,8 +23,6 @@ func (p *Perceptron) ConcurrentForPerceptron(subX [][]float64, subY []int, c cha
 		errors := 0
 		for j := 0; j < len(subX); j++ {
 			update := p.eta * float64(subY[j]-p.internalPredict(subX[j], auxW))
-			fmt.Println(p.eta, subY[j], p.internalPredict(subX[j], auxW), update)
-
 			auxW[0] += update
 			for k := 1; k < len(auxW); k++ {
 				auxW[k] += update * subX[j][k-1]
@@ -119,7 +117,7 @@ func (p *Perceptron) NetInput(X []float64) float64 {
 func (p *Perceptron) Accuracy(xTest [][]float64, yTest []int) float64 {
 	correctPredict := 0.0
 	for i := 0; i < len(xTest); i++ {
-		fmt.Println("Predict:", p.Predict(xTest[i]), "\tTrue: ", yTest[i])
+		//fmt.Println("Predict:", p.Predict(xTest[i]), "\tTrue: ", yTest[i])
 		if p.Predict(xTest[i]) == yTest[i] {
 			correctPredict++
 
@@ -129,7 +127,7 @@ func (p *Perceptron) Accuracy(xTest [][]float64, yTest []int) float64 {
 }
 
 func main() {
-	r := redCSV("iris.data")
+	r := redCSV("./iris.data")
 
 	X, y := fixData(r)
 
@@ -139,6 +137,7 @@ func main() {
 
 	neuron := Perceptron{eta: 0.1, n_inter: 50}
 	neuron.Fit(xTrain, yTrain, 4)
+	fmt.Println("Predict:", neuron.Predict(xTest[0]), "\tTrue: ", yTest[0])
 	fmt.Println("Accuracy: ", neuron.Accuracy(xTest, yTest))
 }
 

@@ -80,10 +80,8 @@ func (p *Perceptron) Fit(X [][]float64, y []int, nThreads int) {
 
 func (p *Perceptron) internalPredict(X []float64, w []float64) int {
 	if p.internalNetInput(X, w) >= 0.0 {
-		//fmt.Println(1)
 		return 1
 	}
-	//fmt.Println(-1)
 	return -1
 }
 
@@ -98,10 +96,8 @@ func (p *Perceptron) internalNetInput(X []float64, w []float64) float64 {
 
 func (p *Perceptron) Predict(X []float64) int {
 	if p.NetInput(X) >= 0.0 {
-		//fmt.Println(1)
 		return 1
 	}
-	//fmt.Println(-1)
 	return -1
 }
 
@@ -146,9 +142,7 @@ func redCSV(name string) [][]string {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	r, err := csv.NewReader(csvfile).ReadAll()
-
 	return r
 }
 
@@ -162,7 +156,6 @@ func whatYouWantToPredict(targets []int, wanted int) []int {
 		}
 	}
 	return newTargets
-
 }
 
 func splitData(X [][]float64, y []int, nTraining int) ([][]float64, [][]float64, []int, []int) {
@@ -183,17 +176,12 @@ func fixData(r [][]string) ([][]float64, []int) {
 		if _, value := keys[entry[target]]; !value {
 			keys[entry[target]] = true
 			list = append(list, entry[target])
-			for number, irisType := range list {
-				if entry[target] == irisType {
-					targets = append(targets, number)
-				}
-			}
+			
 
-		} else {
-			for number, irisType := range list {
-				if entry[target] == irisType {
-					targets = append(targets, number)
-				}
+		} 
+		for number, irisType := range list {
+			if entry[target] == irisType {
+				targets = append(targets, number)
 			}
 		}
 		trainingRow := make([]float64, target)

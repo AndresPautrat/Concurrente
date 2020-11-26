@@ -1,13 +1,174 @@
-//sudo fuser -k 8000/tcp
+//sudo lsof -i -P -n
+//sudo fuser -k Port_Number/tcp
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"math/rand"
 	"net"
 	"strconv"
-	"strings"
+	"time"
 )
+
+// Data iris
+type Data struct {
+	SepalL float64 `json:"sepal_length"`
+	SepalW float64 `json:"sepal_width"`
+	PetalL float64 `json:"petal_length"`
+	PetalW float64 `json:"petal_width"`
+	Class  string  `json:"class"`
+}
+
+// perceptron
+type Perceptron struct {
+	eta     float64   `json:"eta"`
+	n_inter int       `json:"nInter"`
+	w       []float64 `json:"w"`
+	errors  []int     `json:"errors"`
+}
+
+func (p *Perceptron) ConcurrentForPerceptron(subX [][]float64, subY []int, c chan []float64) {
+	auxW := make([]float64, len(subX[0])+1)
+	for i := 0; i < p.n_inter; i++ {
+		errors := 0
+		for j := 0; j < len(subX); j++ {
+			update := p.eta * float64(subY[j]-p.internalPredict(subX[j], auxW))
+			auxW[0] += update
+			for k := 1; k < len(auxW); k++ {
+				auxW[k] += update * subX[j][k-1]
+			}
+			if update != 0.0 {
+				errors += 1
+			}
+		}
+
+		p.errors = append(p.errors, errors)
+	}
+	c <- auxW
+}
+func (p *Perceptron) Fit(X [][]float64, y []int, nThreads int) {
+	auxW := make([]float64, len(X[0])+1)
+	p.w = append(p.w, auxW...)
+	subSetLen := int(len(X) / nThreads)
+	chans := make([]chan []float64, nThreads)
+	for i := range chans {
+		chans[i] = make(chan []float64)
+	}
+	for i := 0; i < nThreads; i++ {
+		go p.ConcurrentForPerceptron(X[i*subSetLen:(i+1)*subSetLen], y[i*subSetLen:(i+1)*subSetLen], chans[i])
+	}
+	for i := 0; i < nThreads; i++ {
+		subWeights := <-chans[i]
+		for j, newW := range subWeights {
+			p.w[j] += newW
+		}
+	}
+}
+func (p *Perceptron) internalPredict(X []float64, w []float64) int {
+	if p.internalNetInput(X, w) >= 0.0 {
+		return 1
+	}
+	return -1
+}
+
+func (p *Perceptron) internalNetInput(X []float64, w []float64) float64 {
+	z := 0.0
+	for i := 0; i < len(X); i++ {
+		z += X[i] * w[i+1]
+	}
+	z += w[0]
+	return z
+}
+
+func (p *Perceptron) Predict(X []float64) int {
+	if p.NetInput(X) >= 0.0 {
+		return 1
+	}
+	return -1
+}
+
+func (p *Perceptron) NetInput(X []float64) float64 {
+	z := 0.0
+	for i := 0; i < len(X); i++ {
+		z += X[i] * p.w[i+1]
+	}
+	z += p.w[0]
+	return z
+}
+
+func (p *Perceptron) Accuracy(xTest [][]float64, yTest []int) float64 {
+	correctPredict := 0.0
+	for i := 0; i < len(xTest); i++ {
+		fmt.Println("Predict:", p.Predict(xTest[i]), "\tTrue: ", yTest[i])
+		if p.Predict(xTest[i]) == yTest[i] {
+			correctPredict++
+
+		}
+	}
+	return correctPredict / float64(len(xTest))
+}
+
+func (p *Perceptron) GetW() []float64 {
+	return p.w
+}
+
+func whatYouWantToPredict(targets []int, wanted int) []int {
+	newTargets := make([]int, len(targets))
+	for i := 0; i < len(targets); i++ {
+		if targets[i] == wanted {
+			newTargets[i] = -1
+		} else {
+			newTargets[i] = 1
+		}
+	}
+	return newTargets
+}
+
+func readJSON() []Data {
+	data, _ := ioutil.ReadFile("irisJson.json")
+	var iris []Data
+	_ = json.Unmarshal(data, &iris)
+	return iris
+	// fmt.Printf("%v %T\n", iris, iris)
+}
+
+func SplitData(allData []Data) ([][]float64, []int) {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(allData), func(i, j int) { allData[i], allData[j] = allData[j], allData[i] })
+	fmt.Println(allData[0].Class)
+	x := make([][]float64, len(allData))
+	y := []int{}
+	keys := make(map[string]bool)
+	list := []string{}
+
+	for i, entry := range allData {
+		if _, value := keys[entry.Class]; !value {
+			keys[entry.Class] = true
+			list = append(list, entry.Class)
+			for i, irisType := range list {
+				if entry.Class == irisType {
+					y = append(y, i)
+				}
+			}
+		} else {
+			for i, irisType := range list {
+				if entry.Class == irisType {
+					y = append(y, i)
+				}
+			}
+		}
+
+		xRow := make([]float64, 4)
+		for j := 0; j < 4; j++ {
+			listOfColumns := [4]float64{allData[i].PetalL, allData[i].PetalW, allData[i].SepalL, allData[i].SepalW}
+			xRow[j] = listOfColumns[j]
+		}
+		x[i] = xRow
+	}
+	return x, y
+}
 
 func server(hostname, remote string, end chan bool) {
 	ln, _ := net.Listen("tcp", hostname)
@@ -15,65 +176,122 @@ func server(hostname, remote string, end chan bool) {
 	fmt.Println("Listening!")
 	for {
 		con, _ := ln.Accept()
-		handle(con, remote, end)
+		handle(con, hostname, remote, end)
 	}
 }
 
-func handle(con net.Conn, remote string, end chan bool) {
+//TODO crear en handle fits con distintos tamaños de data
+func handle(con net.Conn, hostname, remote string, end chan bool) {
+	neuron := Perceptron{eta: 0.1, n_inter: 50}
+
+	allData := readJSON()
+	x, y := SplitData(allData)
+	y = whatYouWantToPredict(y, 0)
+	fmt.Println(neuron.w, x[1][1])
+
+	neuron.Fit(x, y, 4)
+	//allData := readJSON()
 	defer con.Close()
-	r := bufio.NewReader(con)
-	msg, _ := r.ReadString('\n')
-	num, _ := strconv.Atoi(strings.TrimSpace(msg))
-	fmt.Printf("%d from %s\n", num, con.RemoteAddr())
-	if num < 0 {
-		send(num, remote)
-		end <- true
-	} else if num == 0 {
-		fmt.Println("Oh no!, perdí")
+	dec := json.NewDecoder(con)
+	var msg Msg
+	print(con)
+	if err := dec.Decode(&msg); err == nil {
+		fmt.Printf("Message: %v\n", msg)
+
+		sendPerceptron(hostname, msg.Addr, neuron)
+		//send(hostname, msg.Addr, "hola2")
 	} else {
-		send(num-1, remote)
+		var msg2 Msg2
+		if err := dec.Decode(&msg2); err == nil {
+			fmt.Printf("Message: %v\n", msg2)
+		} else {
+
+			fmt.Println("Error: ", err)
+		}
 	}
+	end <- true
 }
 
-func send(num int, remote string) {
+type Msg struct {
+	Addr   string `json:"addr"`
+	Option string `json:"option"`
+}
+
+func send(local, remote string, msg string) {
 	if remote != "0" {
-		if con, err := net.Dial("tcp", remote); err != nil {
-			defer con.Close()
-			fmt.Fprintf(con, "%d\n", num)
+		con, _ := net.Dial("tcp", remote)
+		defer con.Close()
+		enc := json.NewEncoder(con)
+		if err := enc.Encode(Msg{local, msg}); err == nil {
+			fmt.Printf("Sending %s to %s\n", msg, remote)
 		} else {
-			//fmt.Printf("Unable to communicate with %s\n", remote)
-			defer con.Close()
-			fmt.Fprintf(con, "%d\n", num)
+			fmt.Println("Error: ", err)
 		}
 	}
 }
 
+type Msg2 struct {
+	Weights []float64 `json:"weights"`
+}
+
+func sendPerceptron(local, remote string, msg Perceptron) {
+	if remote != "0" {
+		con, _ := net.Dial("tcp", remote)
+		defer con.Close()
+		enc := json.NewEncoder(con)
+		if err := enc.Encode(Msg2{msg.GetW()}); err == nil {
+			fmt.Printf("Sending %s to %s\n", msg.GetW(), remote)
+		} else {
+			fmt.Println("ErrorSend: ", err)
+		}
+	}
+}
+
+func arrayToString(array []float64) string {
+	newArray := strconv.FormatFloat(array[0], 'f', 6, 64)
+	for i := 1; i < len(array); i++ {
+		newArray = newArray + "," + strconv.FormatFloat(array[i], 'f', 6, 64)
+	}
+	return newArray
+}
+
 func main() {
+
 	var hostname, remote string
+	var test string
+	/*
+		neuron := Perceptron{eta: 0.1, n_inter: 50}
+
+		allData := readJSON()
+		x, y := SplitData(allData)
+		y = whatYouWantToPredict(y, 0)
+		fmt.Println(neuron.w, x[1][1])
+
+		neuron.Fit(x, y, 4)
+		fmt.Println("Predict:", neuron.Predict(x[0]), "\tTrue: ", y[0])
+		fmt.Println("Accuracy: ", neuron.Accuracy(x, y))
+	*/
 	fmt.Print("Hostname: ")
 	fmt.Scanf("%s", &hostname)
+	fmt.Scanf("%s", &test)
+	fmt.Print(test)
 	fmt.Print("Remote hostname: ")
 	fmt.Scanf("%s", &remote)
 
 	remote = fmt.Sprintf("localhost:800%s", remote)
 
-	if hostname == "" {
-		fmt.Println("I'm the starter node")
-		var num int
-		for {
-			fmt.Print("Number to start: ")
-			fmt.Scanf("%d", &num)
-			if num == 0 {
-				break
-			}
-			send(num, remote)
-		}
-	} else {
-		hostname = fmt.Sprintf("localhost:800%s", hostname)
-		end := make(chan bool)
+	hostname = fmt.Sprintf("localhost:800%s", hostname)
 
-		go server(hostname, remote, end)
-		<-end
-		fmt.Println("That's  all, folks!")
+	fmt.Println("I'm the starter node")
+	end := make(chan bool)
+	go server(hostname, remote, end)
+	var num int
+	for {
+		fmt.Println("Repartiendo")
+		fmt.Scanf("%d", &num)
+
+		send(hostname, remote, "hola")
+
 	}
+	<-end
 }

@@ -171,45 +171,39 @@ func SplitData(allData []Data) ([][]float64, []int) {
 	return x, y
 }
 
-func server(hostname, remote string, end chan bool) {
+func server(hostname string, end []chan bool) {
 	ln, _ := net.Listen("tcp", hostname)
 	defer ln.Close()
 	fmt.Println("Listening!")
 	for {
 		con, _ := ln.Accept()
-		handle(con, hostname, remote, end)
+		handle(con, hostname, end)
 	}
 }
 
 //TODO crear en handle fits con distintos tamaños de data
-func handle(con net.Conn, hostname, remote string, end chan bool) {
-	neuron := Perceptron{eta: 0.1, n_inter: 50}
-
-	allData := readJSON()
-	x, y := SplitData(allData)
-	y = whatYouWantToPredict(y, 0)
-	fmt.Println(neuron.w, x[1][1])
-
-	neuron.Fit(x, y, 4)
-	//allData := readJSON()
+func handle(con net.Conn, hostname string, end []chan bool) {
 	defer con.Close()
 	dec := json.NewDecoder(con)
 	var msg Msg
 	print(con)
 	if err := dec.Decode(&msg); err == nil {
-		fmt.Printf("Message1: %v\n", msg)
+		fmt.Printf("Message: %v\n", msg)
 
 		if msg.Option == "msg" {
-			sendPerceptron(hostname, msg.Addr, neuron)
+			sendPerceptron(hostname, msg.Addr)
 		}
 		if msg.Option == "per" {
-			fmt.Print(stringToArray(msg.Message))
+			perAux := stringToArray(msg.Message)
+			fmt.Print(perAux)
+			fmt.Println("MakingTrue %d", nWaits)
+			end[nWaits] <- true
+			nWaits++
 		}
-		//send(hostname, msg.Addr, "hola2")
 	} else {
-		fmt.Println("Error: ", err)
+		fmt.Println("ErrorH: ", err)
 	}
-	end <- true
+	//end <- true
 }
 
 type Msg struct {
@@ -226,18 +220,24 @@ func send(local, remote string, msg string) {
 		if err := enc.Encode(Msg{local, "msg", msg}); err == nil {
 			fmt.Printf("Sending %s to %s\n", msg, remote)
 		} else {
-			fmt.Println("Error: ", err)
+			fmt.Println("ErrorS: ", err)
 		}
 	}
 }
 
-func sendPerceptron(local, remote string, msg Perceptron) {
+func sendPerceptron(local, remote string) {
+	allData := readJSON()
+	x, y := SplitData(allData)
+	y = whatYouWantToPredict(y, 0)
+	neuron := Perceptron{eta: 0.1, n_inter: 50}
+	neuron.Fit(x, y, 4)
+
 	if remote != "0" {
 		con, _ := net.Dial("tcp", remote)
 		defer con.Close()
 		enc := json.NewEncoder(con)
-		if err := enc.Encode(Msg{local, "per", arrayToString(msg.GetW())}); err == nil {
-			fmt.Printf("Sending %s to %s\n", msg.GetW(), remote)
+		if err := enc.Encode(Msg{local, "per", arrayToString(neuron.GetW())}); err == nil {
+			fmt.Printf("Sending %s to %s\n", neuron.GetW(), remote)
 		} else {
 			fmt.Println("ErrorSend: ", err)
 		}
@@ -262,43 +262,44 @@ func stringToArray(text string) []float64 {
 	return newArray
 }
 
+var nWaits = 0
+
 func main() {
 
-	var hostname, remote string
+	var hostname string
+	var remote []string
 	var test string
-	/*
-		neuron := Perceptron{eta: 0.1, n_inter: 50}
-
-		allData := readJSON()
-		x, y := SplitData(allData)
-		y = whatYouWantToPredict(y, 0)
-		fmt.Println(neuron.w, x[1][1])
-
-		neuron.Fit(x, y, 4)
-		fmt.Println("Predict:", neuron.Predict(x[0]), "\tTrue: ", y[0])
-		fmt.Println("Accuracy: ", neuron.Accuracy(x, y))
-	*/
 	fmt.Print("Hostname: ")
 	fmt.Scanf("%s", &hostname)
 	fmt.Scanf("%s", &test)
 	fmt.Print(test)
-	fmt.Print("Remote hostname: ")
-	fmt.Scanf("%s", &remote)
 
-	remote = fmt.Sprintf("localhost:800%s", remote)
+	if hostname == "0" {
+		hostname = fmt.Sprintf("localhost:800%s", hostname)
+		var nConnections int
+		fmt.Print("Numero de distribuciones: ")
+		fmt.Scanf("%d", &nConnections)
+		for i := 1; i <= nConnections; i++ {
+			remoteAux := fmt.Sprintf("localhost:800%s", strconv.Itoa(i))
+			remote = append(remote, remoteAux)
+			fmt.Print(remote)
+		}
+		end := make([]chan bool, nConnections)
+		go server(hostname, end)
 
-	hostname = fmt.Sprintf("localhost:800%s", hostname)
+		for _, port := range remote {
+			send(hostname, port, "hola")
+		}
 
-	fmt.Println("I'm the starter node")
-	end := make(chan bool)
-	go server(hostname, remote, end)
-	var num int
-	for {
-		fmt.Println("Repartiendo")
-		fmt.Scanf("%d", &num)
+		for i := 0; i < nConnections; i++ {
+			<-end[i]
+		}
+		fmt.Printf("termine")
+	} else if hostname > "0" {
+		hostname = fmt.Sprintf("localhost:800%s", hostname)
 
-		send(hostname, remote, "hola")
-
+		end := make([]chan bool, 1)
+		go server(hostname, end)
+		<-end[0]
 	}
-	<-end
 }

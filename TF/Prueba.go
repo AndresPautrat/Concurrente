@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"strings"
 )
 
 // Pelicula is a struct
@@ -14,15 +14,14 @@ type Pelicula struct {
 }
 
 func main() {
-	values := []float64{1.1, 2.2, 3.1}
+	values := [3]int{1.2, 2.2, 3.2}
+	print
+	result1 := strings.Trim(strings.Replace(fmt.Sprint(values), " ", ",", -1), "[]")
+	// Convert string slice to string.
+	// ... Has comma in between strings.
+	fmt.Println(result1[0])
 
-	fmt.Print(arrayToString(values))
-}
-
-func arrayToString(array []float64) string {
-	newArray := strconv.FormatFloat(array[0], 'f', 6, 64)
-	for i := 1; i < len(array); i++ {
-		newArray = newArray + "," + strconv.FormatFloat(array[i], 'f', 6, 64)
-	}
-	return newArray
+	// ... Use no separator.
+	result2 := strings.Split(result1, ",")
+	fmt.Println(result2)
 }

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -196,25 +197,25 @@ func handle(con net.Conn, hostname, remote string, end chan bool) {
 	var msg Msg
 	print(con)
 	if err := dec.Decode(&msg); err == nil {
-		fmt.Printf("Message: %v\n", msg)
+		fmt.Printf("Message1: %v\n", msg)
 
-		sendPerceptron(hostname, msg.Addr, neuron)
+		if msg.Option == "msg" {
+			sendPerceptron(hostname, msg.Addr, neuron)
+		}
+		if msg.Option == "per" {
+			fmt.Print(stringToArray(msg.Message))
+		}
 		//send(hostname, msg.Addr, "hola2")
 	} else {
-		var msg2 Msg2
-		if err := dec.Decode(&msg2); err == nil {
-			fmt.Printf("Message: %v\n", msg2)
-		} else {
-
-			fmt.Println("Error: ", err)
-		}
+		fmt.Println("Error: ", err)
 	}
 	end <- true
 }
 
 type Msg struct {
-	Addr   string `json:"addr"`
-	Option string `json:"option"`
+	Addr    string `json:"addr"`
+	Option  string `json:"option"`
+	Message string `json:"message"`
 }
 
 func send(local, remote string, msg string) {
@@ -222,7 +223,7 @@ func send(local, remote string, msg string) {
 		con, _ := net.Dial("tcp", remote)
 		defer con.Close()
 		enc := json.NewEncoder(con)
-		if err := enc.Encode(Msg{local, msg}); err == nil {
+		if err := enc.Encode(Msg{local, "msg", msg}); err == nil {
 			fmt.Printf("Sending %s to %s\n", msg, remote)
 		} else {
 			fmt.Println("Error: ", err)
@@ -230,16 +231,12 @@ func send(local, remote string, msg string) {
 	}
 }
 
-type Msg2 struct {
-	Weights []float64 `json:"weights"`
-}
-
 func sendPerceptron(local, remote string, msg Perceptron) {
 	if remote != "0" {
 		con, _ := net.Dial("tcp", remote)
 		defer con.Close()
 		enc := json.NewEncoder(con)
-		if err := enc.Encode(Msg2{msg.GetW()}); err == nil {
+		if err := enc.Encode(Msg{local, "per", arrayToString(msg.GetW())}); err == nil {
 			fmt.Printf("Sending %s to %s\n", msg.GetW(), remote)
 		} else {
 			fmt.Println("ErrorSend: ", err)
@@ -251,6 +248,16 @@ func arrayToString(array []float64) string {
 	newArray := strconv.FormatFloat(array[0], 'f', 6, 64)
 	for i := 1; i < len(array); i++ {
 		newArray = newArray + "," + strconv.FormatFloat(array[i], 'f', 6, 64)
+	}
+	return newArray
+}
+
+func stringToArray(text string) []float64 {
+	stringsArray := strings.Split(text, ",")
+	var newArray []float64
+	for _, element := range stringsArray {
+		floatAux, _ := strconv.ParseFloat(element, 64)
+		newArray = append(newArray, floatAux)
 	}
 	return newArray
 }

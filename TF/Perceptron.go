@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// Data iris
 type Data struct {
 	SepalL float64 `json:"sepal_length"`
 	SepalW float64 `json:"sepal_width"`
@@ -22,7 +21,6 @@ type Data struct {
 	Class  string  `json:"class"`
 }
 
-// perceptron
 type Perceptron struct {
 	eta     float64   `json:"eta"`
 	n_inter int       `json:"nInter"`
@@ -111,8 +109,25 @@ func (p *Perceptron) Accuracy(xTest [][]float64, yTest []int) float64 {
 	return correctPredict / float64(len(xTest))
 }
 
+func (p *Perceptron) InitW() {
+	auxW := make([]float64, 5)
+	p.w = append(p.w, auxW...)
+}
+
 func (p *Perceptron) GetW() []float64 {
 	return p.w
+}
+
+func (p *Perceptron) SumW(newW []float64) {
+	for i, _ := range p.w {
+		p.w[i] += newW[i]
+	}
+}
+
+func (p *Perceptron) DivideW(divider int) {
+	for _, element := range p.w {
+		element = element / (float64)(divider)
+	}
 }
 
 func whatYouWantToPredict(targets []int, wanted int) []int {
@@ -171,18 +186,18 @@ func SplitData(allData []Data) ([][]float64, []int) {
 	return x, y
 }
 
-func server(hostname string, end []chan bool) {
+func server(hostname string, end chan bool, finalNeuron *Perceptron) {
 	ln, _ := net.Listen("tcp", hostname)
 	defer ln.Close()
 	fmt.Println("Listening!")
 	for {
 		con, _ := ln.Accept()
-		handle(con, hostname, end)
+		handle(con, hostname, end, finalNeuron)
 	}
 }
 
 //TODO crear en handle fits con distintos tamaños de data
-func handle(con net.Conn, hostname string, end []chan bool) {
+func handle(con net.Conn, hostname string, end chan bool, finalNeuron *Perceptron) {
 	defer con.Close()
 	dec := json.NewDecoder(con)
 	var msg Msg
@@ -195,10 +210,8 @@ func handle(con net.Conn, hostname string, end []chan bool) {
 		}
 		if msg.Option == "per" {
 			perAux := stringToArray(msg.Message)
-			fmt.Print(perAux)
-			fmt.Println("MakingTrue %d", nWaits)
-			end[nWaits] <- true
-			nWaits++
+			finalNeuron.SumW(perAux)
+			end <- true
 		}
 	} else {
 		fmt.Println("ErrorH: ", err)
@@ -237,7 +250,7 @@ func sendPerceptron(local, remote string) {
 		defer con.Close()
 		enc := json.NewEncoder(con)
 		if err := enc.Encode(Msg{local, "per", arrayToString(neuron.GetW())}); err == nil {
-			fmt.Printf("Sending %s to %s\n", neuron.GetW(), remote)
+			fmt.Print("Sending \n", neuron.GetW(), " to ", remote)
 		} else {
 			fmt.Println("ErrorSend: ", err)
 		}
@@ -274,6 +287,12 @@ func main() {
 	fmt.Scanf("%s", &test)
 	fmt.Print(test)
 
+	finalNeuron := Perceptron{eta: 0.1, n_inter: 50}
+	finalNeuron.InitW()
+	allData := readJSON()
+	x, y := SplitData(allData)
+	y = whatYouWantToPredict(y, 0)
+
 	if hostname == "0" {
 		hostname = fmt.Sprintf("localhost:800%s", hostname)
 		var nConnections int
@@ -284,22 +303,24 @@ func main() {
 			remote = append(remote, remoteAux)
 			fmt.Print(remote)
 		}
-		end := make([]chan bool, nConnections)
-		go server(hostname, end)
+		end := make(chan bool, nConnections)
+		go server(hostname, end, &finalNeuron)
 
 		for _, port := range remote {
 			send(hostname, port, "hola")
 		}
 
 		for i := 0; i < nConnections; i++ {
-			<-end[i]
+			<-end
 		}
-		fmt.Printf("termine")
+
+		fmt.Println("Predict:", finalNeuron.Predict(x[0]), "\tTrue: ", y[0])
+		fmt.Println("Accuracy: ", finalNeuron.Accuracy(x, y))
 	} else if hostname > "0" {
 		hostname = fmt.Sprintf("localhost:800%s", hostname)
 
-		end := make([]chan bool, 1)
-		go server(hostname, end)
-		<-end[0]
+		end := make(chan bool, 1)
+		go server(hostname, end, &finalNeuron)
+		<-end
 	}
 }

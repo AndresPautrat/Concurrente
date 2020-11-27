@@ -13,14 +13,6 @@ import (
 	"time"
 )
 
-type Data struct {
-	SepalL float64 `json:"sepal_length"`
-	SepalW float64 `json:"sepal_width"`
-	PetalL float64 `json:"petal_length"`
-	PetalW float64 `json:"petal_width"`
-	Class  string  `json:"class"`
-}
-
 type Perceptron struct {
 	eta     float64   `json:"eta"`
 	n_inter int       `json:"nInter"`
@@ -100,7 +92,7 @@ func (p *Perceptron) NetInput(X []float64) float64 {
 func (p *Perceptron) Accuracy(xTest [][]float64, yTest []int) float64 {
 	correctPredict := 0.0
 	for i := 0; i < len(xTest); i++ {
-		fmt.Println("Predict:", p.Predict(xTest[i]), "\tTrue: ", yTest[i])
+		//fmt.Println("Predict:", p.Predict(xTest[i]), "\tTrue: ", yTest[i])
 		if p.Predict(xTest[i]) == yTest[i] {
 			correctPredict++
 
@@ -140,6 +132,14 @@ func whatYouWantToPredict(targets []int, wanted int) []int {
 		}
 	}
 	return newTargets
+}
+
+type Data struct {
+	SepalL float64 `json:"sepal_length"`
+	SepalW float64 `json:"sepal_width"`
+	PetalL float64 `json:"petal_length"`
+	PetalW float64 `json:"petal_width"`
+	Class  string  `json:"class"`
 }
 
 func readJSON() []Data {
@@ -244,6 +244,8 @@ func sendPerceptron(local, remote string) {
 	y = whatYouWantToPredict(y, 0)
 	neuron := Perceptron{eta: 0.1, n_inter: 50}
 	neuron.Fit(x, y, 4)
+	fmt.Println("Predict:", neuron.Predict(x[0]), "\tTrue: ", y[0])
+	fmt.Println("Accuracy: ", neuron.Accuracy(x, y))
 
 	if remote != "0" {
 		con, _ := net.Dial("tcp", remote)

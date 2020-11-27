@@ -1,0 +1,3 @@
+Crea n servidores con los puertos 8001, 8002, 8003... en orden ascendente. (Comenzar con el puerto 8001)
+Crea un servidor con el puerto 8000, pedira introducir otro numero de distribuciones, ingresar el numero de servidores que se hayan creado (n).
+Se mostrara toda la informacion de comunicacion y perceptrons creados en cada servidor. En el puerto 8000 se mostrara el resultado final.
